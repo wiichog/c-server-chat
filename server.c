@@ -84,7 +84,10 @@ void errorReg(char user[], char ip[INET_ADDRSTRLEN], int fd){
 	strcat(msg, ip);
 	
 	int len = strlen(msg);
-	sendMsg(fd, msg, &len);
+	if(sendMsg(fd, msg, &len) == -1){
+		perror("send");	
+	}
+	return;
 }
 
 void getUsrInfo(char user[], char usrAsk[]){
@@ -100,8 +103,36 @@ void changeStat(char user[], int status){
 	
 }
 
-void dcUser(char user[]){
+void dcUser(char user[], int fd){
+
+	data_struct_t* value;
+	value = malloc(sizeof(data_struct_t));
+
+	if(hashmap_get(map, user, (void**)(&value)) == 0 ){
+			
+		if(hashmap_remove(map, user) != 0 ){
+			printf("There was an issue removing '%s' from hashmap \n", user);
+			fflush(stdout);		
+			close(fd);
+			FD_CLR(fd, &master);
+			pthread_exit(NULL);	
+		}
+		else{
+			printf("Succesfully removed '%s' from server list", user);		
+			fflush(stdout);			
+			close(fd);
+			FD_CLR(fd, &master);
+			pthread_exit(NULL);	
+		}	
+		
 	
+	}else{
+		printf("User '%s' was not found in hashmap \n", user);	
+		fflush(stdout);
+		close(fd);
+		FD_CLR(fd, &master);
+		pthread_exit(NULL);	
+	}
 
 }
 
@@ -121,7 +152,7 @@ void regUser(char user[], char ip[INET_ADDRSTRLEN], int port, int status, int fd
 	cl->status = status;
 	cl->fd = fd;
 	value->client = (void*)cl;	
-	printf("IP is %s \n", cl->ip);
+	
 	if((hashmap_length(map) >= 1) && hashmap_get(map, value->key_string, (void**)(&value)) != 0){
 		if(hashmap_put(map, value->key_string, value) == 0){
 		
@@ -198,14 +229,9 @@ void handleRequest(int protocol, char msge[], int fd){
 			/*
 			[Error de registro {servidor a cliente}]
 				01|usuario|direccionIP¬
+				implemented in regUser function by calling errorReg function
 			*/
-			i = 0;
-			char *params1[2]; 
-			while ((token = strtok(NULL, delim)) != NULL){
-				
-				params1[i] = token;
-				i ++;
-			}
+			
 			return;
 		case 2 :
 			/*
@@ -219,7 +245,8 @@ void handleRequest(int protocol, char msge[], int fd){
 			while ((token = strtok(NULL, delim)) != NULL){
 				
 				char *params2 = token;
-				dcUser(params2);
+				
+				dcUser(params2, fd);
 			}
 			
 			return;
@@ -352,10 +379,11 @@ void *connection_handler( void *arg){
 
 	int cbuff;
 	char buf [256] = " ";
-	memset(buf, 0, sizeof buf);
+	
 	int accept = 1;
 
 	while(accept == 1){
+		memset(buf, 0, sizeof buf);
 		if (FD_ISSET(sockFD, &read_fds)){
 			if(sockFD != listener){
 
@@ -379,7 +407,6 @@ void *connection_handler( void *arg){
 							if (i != listener && i != 1){
 								if (sendMsg(i, buf, &cbuff) == -1) {
 									perror("send");
-									printf("Only %d bytes were sent due to error \n", cbuff);
 									fflush(stdout);
 								}
 							}
