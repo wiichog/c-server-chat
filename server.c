@@ -36,11 +36,11 @@ typedef struct data_struct_s {
 
 
 typedef struct client{
-	
-	char ip;
+		
 	int port;
 	int status;
 	int fd;
+	char *ip;
 	
 } client;
 
@@ -73,6 +73,20 @@ void usrMsg(char sender[], char target[], char msg[]){
 	
 
 }
+
+
+
+void errorReg(char user[], char ip[INET_ADDRSTRLEN], int fd){
+	char msg[1024] = "01|";
+	
+	strcat(msg, user);
+	strcat(msg, "|");
+	strcat(msg, ip);
+	
+	int len = strlen(msg);
+	sendMsg(fd, msg, &len);
+}
+
 void getUsrInfo(char user[], char usrAsk[]){
 	
 
@@ -102,26 +116,44 @@ void regUser(char user[], char ip[INET_ADDRSTRLEN], int port, int status, int fd
 	value = malloc(sizeof(data_struct_t));
 	snprintf(value->key_string, KEY_MAX_LENGTH, "%s", user);
 	
-	cl->ip = *(char*)ip;
+	cl->ip = ip;
 	cl->port = port;
 	cl->status = status;
 	cl->fd = fd;
 	value->client = (void*)cl;	
-	
-	if(hashmap_put(map, value->key_string, value) == 0){
+	printf("IP is %s \n", cl->ip);
+	if((hashmap_length(map) >= 1) && hashmap_get(map, value->key_string, (void**)(&value)) != 0){
+		if(hashmap_put(map, value->key_string, value) == 0){
 		
-		printf("user '%s' registered ", value->key_string);
-		printf("num %d", hashmap_length(map));
+			printf("user '%s' with number '%d' registered \n", value->key_string,hashmap_length(map));
+			fflush(stdout);
+			
+		}
+		else{
+			printf("Error registering user '%s'\n", value->key_string);
+			fflush(stdout);
+			errorReg(value->key_string, cl->ip, fd);
+			}
+	}
+	else if(hashmap_length(map) == 0){
+		if(hashmap_put(map, value->key_string, value) == 0){
+		
+			printf("user '%s' with number '%d' registered \n", value->key_string,hashmap_length(map));
+			fflush(stdout);
+			
+		}
+		else{
+			printf("Error registering user '%s'\n", value->key_string);
+			fflush(stdout);
+			errorReg(value->key_string, cl->ip, fd);
+		}
+	}
+	else{
+		printf("Error registering user '%s' , name already taken\n", value->key_string);
 		fflush(stdout);
-		char *msg = "You were registered succesfully";
-		int len = strlen(msg);
-		sendMsg(fd, msg, &len);
+		errorReg(value->key_string, cl->ip, fd);
 	}
 	return;
-}
-
-void errorReg(char user[], char ip[INET_ADDRSTRLEN]){
-	
 }
 
 void handleRequest(int protocol, char msge[], int fd){
