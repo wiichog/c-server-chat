@@ -30,26 +30,29 @@ status
 
 typedef struct data_struct_s {
 	char key_string[KEY_MAX_LENGTH];
-	int number;
-	char ip[INET_ADDRSTRLEN];
-	int port;
-	int status;
+	void* client;
+	
 } data_struct_t;
 
-struct threadParams {
 
-	int clientFD;
-	fd_set *master;
-	fd_set *read_fds;
-	int listener;
-	int *fdmax;
-	map_t map;
+typedef struct client{
+	
+	char ip;
+	int port;
+	int status;
+	int fd;
+	
+} client;
 
-};
-
+map_t map;
+fd_set master;
+fd_set read_fds;
+int fdmax;
+int listener;
 
 int sendMsg(int csocket, char *buf, int *len ){
 
+	
 	int total = 0;
 	int bytesleft = *len;
 	int n;
@@ -66,56 +69,69 @@ int sendMsg(int csocket, char *buf, int *len ){
 	return n == -1?-1:0; //return -1 on fail, 0 on success
 }
 
-void usrMsg(char sender[], char target[], char msg[], map_t map){
+void usrMsg(char sender[], char target[], char msg[]){
 	
 
 }
-void getUsrInfo(char user[], char usrAsk[], map_t map){
+void getUsrInfo(char user[], char usrAsk[]){
 	
 
 }
-void getUsers(char user[], map_t map){
-	
-
-}
-
-void changeStat(char user[], int status, map_t map){
-	
-}
-
-void dcUser(char user[], map_t map){
+void getUsers(char user[]){
 	
 
 }
 
-void regUser(char user[], char ip[INET_ADDRSTRLEN], int port, int status, map_t map ){
+void changeStat(char user[], int status){
+	
+}
 
+void dcUser(char user[]){
+	
+
+}
+
+void regUser(char user[], char ip[INET_ADDRSTRLEN], int port, int status, int fd){
+	
 	int error;
 	data_struct_t* value;
 	char key_string[KEY_MAX_LENGTH];
 	
+	client *cl = malloc(sizeof(client));
+
 	value = malloc(sizeof(data_struct_t));
 	snprintf(value->key_string, KEY_MAX_LENGTH, "%s", user);
 	
-	value-> number = hashmap_length(map) + 1;
-	printf("string is %s\n", value->key_string);
-	error = hashmap_put(map, value->key_string, value);
-	assert(error == MAP_OK);	
-
+	cl->ip = *(char*)ip;
+	cl->port = port;
+	cl->status = status;
+	cl->fd = fd;
+	value->client = (void*)cl;	
+	
+	if(hashmap_put(map, value->key_string, value) == 0){
+		
+		printf("user '%s' registered ", value->key_string);
+		printf("num %d", hashmap_length(map));
+		fflush(stdout);
+		char *msg = "You were registered succesfully";
+		int len = strlen(msg);
+		sendMsg(fd, msg, &len);
+	}
+	return;
 }
 
 void errorReg(char user[], char ip[INET_ADDRSTRLEN]){
 	
 }
 
-void handleRequest(int protocol, char msge[], map_t *map){
-
-	msge = "07|mochila|mochila2|mensajestupido";
+void handleRequest(int protocol, char msge[], int fd){
+	
+	//msge = "00|user|192.168.0.1|1100|0";
 	char delim[1] = "|";
 	char *token;
 	int i;
 	char *msg = strdup(msge);
-	protocol = 8;
+	//protocol = 8;
 	
 	
 	token = strtok(msg, delim);
@@ -143,7 +159,7 @@ void handleRequest(int protocol, char msge[], map_t *map){
 			port = (int)strtol(params[2], &ptr, 10);
 			status = (int)strtol(params[3], &ptr, 10);
 						
-			regUser(params[0], params[1], port, status, map);
+			regUser(params[0], params[1], port, status, fd);
 
 			return;
 		case 1 :
@@ -171,7 +187,7 @@ void handleRequest(int protocol, char msge[], map_t *map){
 			while ((token = strtok(NULL, delim)) != NULL){
 				
 				char *params2 = token;
-				dcUser(params2, map);
+				dcUser(params2);
 			}
 			
 			return;
@@ -192,7 +208,7 @@ void handleRequest(int protocol, char msge[], map_t *map){
 			int status3;
 			char *ptr3;
 			status3 = (int)strtol(params3[1], &ptr3, 10);
-			changeStat(params3[0], status3, map);
+			changeStat(params3[0], status3);
 			return;
 		case 4 :
 			/*
@@ -208,7 +224,7 @@ void handleRequest(int protocol, char msge[], map_t *map){
 				params4[i] = token;
 				i ++;
 			}
-			getUsrInfo(params4[0], params4[1], map);
+			getUsrInfo(params4[0], params4[1]);
 			return;
 		case 5 :
 			/*			
@@ -234,7 +250,7 @@ void handleRequest(int protocol, char msge[], map_t *map){
 			while ((token = strtok(NULL, delim)) != NULL){
 				
 				char *params6 = (char*)token;
-				getUsers(params6, map);
+				getUsers(params6);
 			}
 			return;
 		case 7 :
@@ -265,7 +281,7 @@ void handleRequest(int protocol, char msge[], map_t *map){
 				params8[i] = token;
 				i ++;
 			}
-			usrMsg(params8[0], params8[1], params8[2], map);
+			usrMsg(params8[0], params8[1], params8[2]);
 			return;
 		default : 
 			printf("Invalid protocol %d", protocol);
@@ -276,7 +292,7 @@ void handleRequest(int protocol, char msge[], map_t *map){
 
 int getProt(char msg[]){
 	
-	msg = "07|user|192.168.0.1|1100|1";
+	//msg = "00|user|192.168.0.1|1100|0";
 	
 	long protocol;
 	char *str;
@@ -285,6 +301,9 @@ int getProt(char msg[]){
 	
 	if (protocol){
 		return (int)protocol;
+	}
+	else if(msg != str){
+		return 0;
 	}
 	else{
 		
@@ -297,13 +316,7 @@ int getProt(char msg[]){
 
 void *connection_handler( void *arg){
 	
-	struct threadParams *params = arg;
-	int sockFD = params->clientFD;
-	int listener = params->listener;
-	fd_set *read_fds = params->read_fds;
-	fd_set *master = params->master;
-	int *fdmax = params->fdmax;
-	map_t *map = params->map;
+	int sockFD = *(int*)arg;
 
 	int cbuff;
 	char buf [256] = " ";
@@ -311,7 +324,7 @@ void *connection_handler( void *arg){
 	int accept = 1;
 
 	while(accept == 1){
-		if (FD_ISSET(sockFD, read_fds)){
+		if (FD_ISSET(sockFD, &read_fds)){
 			if(sockFD != listener){
 
 				if ((cbuff = recv(sockFD, buf, sizeof buf, 0)) <= 0) {
@@ -322,19 +335,20 @@ void *connection_handler( void *arg){
 						perror("recv");			
 					}
 					close(sockFD);
-					FD_CLR(sockFD, master);
+					FD_CLR(sockFD, &master);
 				}
 				else{	
 						
-					handleRequest(getProt(buf), buf, map);									
+					handleRequest(getProt(buf), buf, sockFD);	
+											
 					int i;
-					for(i = 0; i <= *(int*)fdmax; i++){
-					
-						if (FD_ISSET(i, master)){
+					for(i = 0; i <= fdmax; i++){
+						if (FD_ISSET(i, &master)){
 							if (i != listener && i != 1){
 								if (sendMsg(i, buf, &cbuff) == -1) {
 									perror("send");
 									printf("Only %d bytes were sent due to error \n", cbuff);
+									fflush(stdout);
 								}
 							}
 						}
@@ -343,11 +357,13 @@ void *connection_handler( void *arg){
 				}
 			}else{
 				printf("sockfd == listener");
+				fflush(stdout);
 			}
 		}
 
 		else{
 			printf("FD_ISSET == false");
+			fflush(stdout);
 		}
 	}
 	return 0;
@@ -357,7 +373,6 @@ void *connection_handler( void *arg){
 int main(int argc, char *argv[])
 {
 
-	map_t *map;
 	map = hashmap_new();
 /*
 
@@ -414,17 +429,16 @@ int main(int argc, char *argv[])
 
 */
 
-    fd_set master;
-    fd_set read_fds;
-    int fdmax;
     
-    int listener = 0, connfd = 0;
+    
+    listener = 0;
 
+	int connfd = 0;
     int status = 0;
     int enable = 1;
     int cbuff, i, j;
 
-    struct threadParams *params;
+    
     struct addrinfo servinfo, *result, *p; 
     struct sockaddr_storage client_addr;
     struct sockaddr *addr;
@@ -487,6 +501,7 @@ int main(int argc, char *argv[])
 
     while(1)
     {
+	
 	read_fds = master;
 	if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1){
 		perror("select");
@@ -516,15 +531,9 @@ int main(int argc, char *argv[])
 					//duda existencial de freddie = usar detach ? es necesario aqui en algun momento join? 
 
 					pthread_t client_thread;
-					params = malloc(sizeof (*params));
-					params->clientFD = connfd;
-					params->master = &master; 
-					params->listener = listener;
-					params->read_fds = &read_fds;
-					params->fdmax = &fdmax;
-					params->map = &map;
 					
-					if(pthread_create( &client_thread, NULL, connection_handler, (void*) params) < 0){
+					
+					if(pthread_create( &client_thread, NULL, connection_handler, &connfd) < 0){
 						perror("Could not create thread");
 						return 1;
 					}
